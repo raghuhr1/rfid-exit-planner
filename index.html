@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exit gate RF planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#EDF1F3;--panel:#FFFFFF;--ink:#16222E;--muted:#5A6B78;--line:#C9D3DA;--grid:rgba(22,34,46,.06);
+  --zoneA:#0E9F87;--zoneB:#5A55D6;--alarm:#D8412F;--signal:#E89B2C;--paid:#2F7FD1;--good:#1E8A5A;--warn:#B7791F;
+  --shelf:rgba(90,107,120,.28);--outside:rgba(90,107,120,.09);
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0F161C;--panel:#16202A;--ink:#E6EDF2;--muted:#93A3AF;--line:#2A3844;--grid:rgba(230,237,242,.05);
+  --zoneA:#2FC2A7;--zoneB:#8C87F0;--alarm:#F0624F;--signal:#F2B04E;--paid:#5AA2EC;--good:#4CC08A;--warn:#E3A948;
+  --shelf:rgba(147,163,175,.3);--outside:rgba(147,163,175,.08);
+}}
+:root[data-theme="dark"]{
+  --paper:#0F161C;--panel:#16202A;--ink:#E6EDF2;--muted:#93A3AF;--line:#2A3844;--grid:rgba(230,237,242,.05);
+  --zoneA:#2FC2A7;--zoneB:#8C87F0;--alarm:#F0624F;--signal:#F2B04E;--paid:#5AA2EC;--good:#4CC08A;--warn:#E3A948;
+  --shelf:rgba(147,163,175,.3);--outside:rgba(147,163,175,.08);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.55}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 20px 48px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:22px}
+h1{font-family:"Barlow Semi Condensed","Barlow",sans-serif;font-weight:600;font-size:clamp(28px,4vw,40px);line-height:1.05;margin:0;letter-spacing:-.01em}
+header p{margin:6px 0 0;color:var(--muted);max-width:62ch}
+.stamp{font-family:"Barlow Semi Condensed",sans-serif;font-size:14px;color:var(--muted);border:1.5px solid var(--line);padding:6px 10px;border-radius:4px;white-space:nowrap}
+.layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.controls{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 18px 14px}
+fieldset{border:0;border-bottom:1px solid var(--line);margin:0;padding:14px 0}
+fieldset:last-child{border-bottom:0}
+legend{font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:17px;padding:0;margin-bottom:6px}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;margin:10px 0}
+.row label{font-size:14px;color:var(--muted)}
+.row output{font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:15px;min-width:64px;text-align:right}
+.row input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--zoneA)}
+select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:7px 8px}
+.full{grid-column:1/-1}
+.spec{margin-top:10px;background:var(--paper);border-radius:8px;padding:10px 12px;font-size:14px}
+.spec dl{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0}
+.spec dt{color:var(--muted)}.spec dd{margin:0;text-align:right}
+.stage{min-width:0}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+button{font:inherit;font-size:14px;font-weight:500;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:active{transform:translateY(1px)}
+button[aria-pressed="true"]{border-color:var(--zoneA);color:var(--zoneA)}
+:focus-visible{outline:2px solid var(--paid);outline-offset:2px}
+.plan{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+canvas{display:block;width:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);margin:8px 2px 0}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.verdict{margin:16px 0 12px;padding:12px 14px;border-left:4px solid var(--good);background:var(--panel);font-size:15px}
+.verdict.bad{border-left-color:var(--alarm)}
+.verdict strong{font-weight:600}
+.readouts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.ro{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.ro span{display:block;font-size:13px;color:var(--muted)}
+.ro b{display:block;font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:22px;line-height:1.2}
+.ro small{font-size:12px;color:var(--muted)}
+.ok{color:var(--good)}.bad{color:var(--alarm)}.meh{color:var(--warn)}
+.log{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:14px;min-height:118px}
+.log div{padding:3px 0;border-bottom:1px dashed var(--line)}
+.log div:last-child{border-bottom:0}
+.counters{display:flex;gap:16px;font-size:13px;color:var(--muted);margin-top:6px}
+h2{font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:24px;margin:36px 0 4px}
+.sub{color:var(--muted);margin:0 0 12px;max-width:72ch}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:760px;font-size:14px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-weight:600;color:var(--muted);font-size:13px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--paper)}
+tbody tr.sel{background:var(--paper);box-shadow:inset 4px 0 0 var(--zoneA)}
+td.name{font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:15px}
+.notes{max-width:72ch;color:var(--muted);font-size:15px}
+.notes p{margin:0 0 10px}
+@media (prefers-reduced-motion:reduce){button:active{transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Exit gate RF planner</h1>
+    <p>Plan an overhead RFID exit for a retail store with Zebra fixed readers and antennas. Change the hardware and layout, then watch shoppers walk through the gate.</p>
+  </div>
+  <div class="stamp">Top view, 1 grid square = 5 ft</div>
+</header>
+
+<div class="layout">
+<aside class="controls" aria-label="Settings">
+  <fieldset>
+    <legend>Hardware</legend>
+    <div class="row"><label for="reader" class="full">Reader</label>
+      <select id="reader" class="full">
+        <option value="FX9600-8" selected>FX9600, 8 ports</option>
+        <option value="FX9600-4">FX9600, 4 ports</option>
+        <option value="FX7500-4">FX7500, 4 ports</option>
+        <option value="FX7500-2">FX7500, 2 ports</option>
+      </select></div>
+    <div class="row"><label for="readers" class="full">Number of readers</label>
+      <select id="readers" class="full"><option value="1" selected>1 reader</option><option value="2">2 readers</option></select></div>
+    <div class="row"><label for="ant" class="full">Antenna</label>
+      <select id="ant" class="full"></select></div>
+    <div class="row" id="modeRow"><label for="mode" class="full">AN440 wiring</label>
+      <select id="mode" class="full"><option value="mono" selected>Mono-static, 1 port per antenna</option><option value="bi">Bi-static, 2 ports per antenna</option></select></div>
+    <div class="row"><label for="rot" class="full">Antenna orientation</label>
+      <select id="rot" class="full"><option value="0" selected>Long side across the gate</option><option value="1">Long side along the walkway</option></select></div>
+    <div class="spec" id="spec"></div>
+  </fieldset>
+  <fieldset>
+    <legend>Exit layout</legend>
+    <div class="row"><label for="gw">Gate width</label><output id="gwO"></output><input type="range" id="gw" min="10" max="40" step="1" value="30"></div>
+    <div class="row"><label for="rows" class="full">Antenna rows</label>
+      <select id="rows" class="full"><option value="2" selected>2 rows, detects direction</option><option value="1">1 row, presence only</option></select></div>
+    <div class="row"><label for="per">Antennas per row</label><output id="perO"></output><input type="range" id="per" min="1" max="5" step="1" value="3"></div>
+    <div class="row"><label for="sp">Row spacing</label><output id="spO"></output><input type="range" id="sp" min="3" max="10" step="0.5" value="5"></div>
+    <div class="row"><label for="ht">Antenna height</label><output id="htO"></output><input type="range" id="ht" min="8" max="18" step="0.5" value="10"></div>
+    <div class="row"><label for="sd">Display shelf distance from gate</label><output id="sdO"></output><input type="range" id="sd" min="4" max="25" step="1" value="15"></div>
+  </fieldset>
+  <fieldset>
+    <legend>RF settings</legend>
+    <div class="row"><label for="region" class="full">Region rules</label>
+      <select id="region" class="full"><option value="IN" selected>India, 865 to 867 MHz, 4 W ERP</option><option value="EU">EU (ETSI), 865 to 868 MHz, 2 W ERP</option><option value="US">US (FCC), 902 to 928 MHz, 4 W EIRP</option></select></div>
+    <div class="row"><label for="pw">Reader power per port</label><output id="pwO"></output><input type="range" id="pw" min="10" max="33" step="0.5" value="26"></div>
+    <div class="row"><label for="cable">Cable loss</label><output id="cableO"></output><input type="range" id="cable" min="0" max="5" step="0.5" value="1"></div>
+    <div class="row"><label for="tag" class="full">Tag type</label>
+      <select id="tag" class="full"><option value="-4">Small tag (jewellery, cosmetics)</option><option value="0" selected>Standard apparel label</option><option value="3">Large high-performance tag</option></select></div>
+    <div class="row"><label for="carry" class="full">How items are carried</label>
+      <select id="carry" class="full"><option value="0">In hand, open</option><option value="-3" selected>In a shopping bag</option><option value="-6">Close to the body or in a pocket</option></select></div>
+    <div class="row"><label for="th">Tag height above floor</label><output id="thO"></output><input type="range" id="th" min="1" max="5" step="0.5" value="3.5"></div>
+  </fieldset>
+</aside>
+
+<section class="stage" aria-label="Simulation">
+  <div class="toolbar">
+    <button id="bPaid">Paid customer leaves</button>
+    <button id="bUnpaid">Unpaid item leaves</button>
+    <button id="bEnter">Customer enters</button>
+    <button id="bAuto" aria-pressed="true">Auto traffic</button>
+    <button id="bClear">Clear log</button>
+  </div>
+  <div class="plan"><canvas id="cv" role="img" aria-label="Top view of the store exit with antenna read zones and shoppers"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--zoneA)"></span>Zone A, inside row</span>
+      <span><span class="dot" style="background:var(--zoneB)"></span>Zone B, door row</span>
+      <span><span class="dot" style="background:var(--paid)"></span>Paid item</span>
+      <span><span class="dot" style="background:var(--alarm)"></span>Unpaid item</span>
+      <span><span class="dot" style="background:var(--signal)"></span>Tag being read</span>
+    </div>
+  </div>
+  <div class="verdict" id="verdict" aria-live="polite"></div>
+  <div class="readouts">
+    <div class="ro"><span>Read footprint</span><b id="rFoot"></b><small id="rFootS"></small></div>
+    <div class="ro"><span>Radiated power (EIRP)</span><b id="rEirp"></b><small id="rEirpS"></small></div>
+    <div class="ro"><span>Gate coverage</span><b id="rCov"></b><small>along both antenna rows</small></div>
+    <div class="ro"><span>Direction</span><b id="rDir"></b><small id="rDirS"></small></div>
+    <div class="ro"><span>Display shelf</span><b id="rShelf"></b><small>stray reads cause false alarms</small></div>
+    <div class="ro"><span>Reader ports</span><b id="rPorts"></b><small id="rPortsS"></small></div>
+  </div>
+  <div class="log" id="log" aria-live="polite"><div style="color:var(--muted)">Shopper events will appear here.</div></div>
+  <div class="counters"><span>Alarms: <b id="cA">0</b></span><span>Missed thefts: <b id="cM">0</b></span><span>Unclear direction: <b id="cU">0</b></span></div>
+</section>
+</div>
+
+<h2>Every antenna at these settings</h2>
+<p class="sub">Same reader, power, height, and layout for each antenna. Select a row to load that antenna into the simulation.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Antenna</th><th>Gain</th><th>Beam H × V</th><th>Polarization</th><th>Footprint across × along</th><th>Coverage</th><th>Direction</th><th>Shelf</th><th>EIRP</th></tr></thead>
+  <tbody id="tbody"></tbody>
+</table></div>
+
+<h2>How this model works</h2>
+<div class="notes">
+  <p>Read range starts from the radiated power (reader power plus antenna gain, minus cable loss), then allows 3 dB for a circular antenna reading a linear tag. Tag size and how the item is carried add or remove signal. As a reference, a 6 dBi antenna at 30 dBm reaches about 14 ft to a standard tag in open hand.</p>
+  <p>The footprint on the floor comes from that range and the distance between the antenna and the tag height. It's stretched or squeezed by the antenna's beamwidth, so a wide-beam antenna spreads its zone and a narrow one concentrates it. Bi-static AN440 wiring adds a small sensitivity gain.</p>
+  <p>Antenna figures are typical EU-band values from Zebra's antenna family data. FX7500 maximum power is shown as about 31.5 dBm; confirm it on the current datasheet. Real read zones are irregular because of glass, metal frames, floors, and people, so treat these numbers as a planning starting point and confirm the layout with a walk test on site.</p>
+</div>
+</div>
+
+<script>
+var ANT={
+  AN440:{g:6,h:70,v:70,pol:"1 LHCP + 1 RHCP (dual)",ip:"IP67",size:"575 × 259 mm",note:"Large-area dual element, retail and dock doors"},
+  AN480:{g:6,h:65,v:65,pol:"LHCP or RHCP",ip:"IP54",size:"259 × 259 mm",note:"General purpose, wide band"},
+  AN510:{g:8.5,h:68,v:68,pol:"RHCP",ip:"IP67",size:"250 × 250 mm",note:"Rugged low profile, indoor and outdoor"},
+  AN520:{g:5.5,h:115,v:115,pol:"RHCP",ip:"IP68",size:"150 × 150 mm",note:"Small, very wide beam"},
+  AN610:{g:5,h:80,v:80,pol:"LHCP",ip:"IP54",size:"275 × 214 mm",note:"Slim flat panel for customer areas"},
+  AN620:{g:7,h:75,v:48,pol:"LHCP",ip:"IP54",size:"391 × 275 mm",note:"Ultra-slim large flat panel for retail"},
+  AN650:{g:9,h:20,v:80,pol:"RHCP",ip:"IP65",size:"915 × 305 mm",note:"Long, narrow beam, ultra-low profile"},
+  AN720:{g:3.5,h:100,v:100,pol:"LHCP",ip:"IP67",size:"133 × 133 mm",note:"Compact and discreet, short range"}
+};
+var READ={"FX9600-8":{ports:8,max:33},"FX9600-4":{ports:4,max:33},"FX7500-4":{ports:4,max:31.5},"FX7500-2":{ports:2,max:31.5}};
+var LIMIT={IN:{eirp:38.2,txt:"India limit about 38.2 dBm EIRP (4 W ERP)"},EU:{eirp:35.2,txt:"ETSI limit about 35.2 dBm EIRP (2 W ERP)"},US:{eirp:36,txt:"FCC limit 36 dBm EIRP (4 W)"}};
+var $=function(id){return document.getElementById(id)};
+var antSel=$("ant");
+Object.keys(ANT).forEach(function(k){var o=document.createElement("option");o.value=k;o.textContent=k+", "+ANT[k].g+" dBi";if(k==="AN440")o.selected=true;antSel.appendChild(o)});
+
+var WORLD_H=34,GATE_Y=28;
+function st(){return{
+  reader:$("reader").value,readers:+$("readers").value,ant:antSel.value,mode:$("mode").value,rot:$("rot").value==="1",
+  gw:+$("gw").value,rows:+$("rows").value,per:+$("per").value,sp:+$("sp").value,ht:+$("ht").value,sd:+$("sd").value,
+  region:$("region").value,pw:+$("pw").value,cable:+$("cable").value,tag:+$("tag").value,carry:+$("carry").value,tagH:+$("th").value}}
+
+function calc(key,s){
+  var a=ANT[key],rd=READ[s.reader],P=Math.min(s.pw,rd.max),bi=key==="AN440"&&s.mode==="bi";
+  var eirp=P+a.g-s.cable;
+  var R0=14.14*Math.pow(10,(eirp-36+s.tag+s.carry+(bi?1.5:0))/20);
+  var d=Math.max(s.ht-s.tagH,0.5);
+  var base=R0>d?Math.sqrt(R0*R0-d*d):0;
+  var bx=a.h,by=a.v;if(s.rot){var t=bx;bx=by;by=t}
+  var w=function(b){return Math.min(1.3,Math.max(0.5,Math.sqrt(b/70)))};
+  return{P:P,eirp:eirp,R0:R0,rx:base*w(bx),ry:base*w(by),portsPer:bi?2:1};
+}
+function geom(s){
+  var W=Math.max(50,s.gw+20),gl=(W-s.gw)/2,gr=gl+s.gw,yB=GATE_Y-2,yA=yB-s.sp,rows=s.rows===2?[yA,yB]:[yB],ants=[];
+  rows.forEach(function(y,ri){for(var i=0;i<s.per;i++)ants.push({x:gl+s.gw*(i+0.5)/s.per,y:y,row:s.rows===2?(ri===0?"A":"B"):"B"})});
+  var shelf={x:Math.max(1,gl-4),y:GATE_Y-s.sd-2,w:16,h:2};
+  return{W:W,gl:gl,gr:gr,yA:yA,yB:yB,rows:rows,ants:ants,shelf:shelf};
+}
+function inside(c,a,x,y){if(c.rx<=0||c.ry<=0)return false;var dx=(x-a.x)/c.rx,dy=(y-a.y)/c.ry;return dx*dx+dy*dy<=1}
+function inRow(c,g,row,x,y){for(var i=0;i<g.ants.length;i++){var a=g.ants[i];if(a.row===row&&inside(c,a,x,y))return true}return false}
+function evaluate(c,s,g){
+  var cov=1;
+  g.rows.forEach(function(ry){var n=0,k=0;for(var x=g.gl;x<=g.gr;x+=0.25){n++;for(var i=0;i<g.ants.length;i++){var a=g.ants[i];if(a.y===ry&&inside(c,a,x,ry)){k++;break}}}cov=Math.min(cov,k/n)});
+  var stray=false,sh=g.shelf;
+  for(var x=sh.x;x<=sh.x+sh.w&&!stray;x+=0.5)for(var y=sh.y;y<=sh.y+sh.h;y+=0.5){for(var i=0;i<g.ants.length;i++)if(inside(c,g.ants[i],x,y)){stray=true;break}if(stray)break}
+  var dir,dq;
+  if(s.rows===1){dir="Not detected";dq="bad"}
+  else if(cov<0.99){dir="Gaps";dq="bad"}
+  else{var r=c.ry/s.sp;if(r<=2){dir="Clear";dq="ok"}else if(r<=2.8){dir="Marginal";dq="meh"}else{dir="Poor";dq="bad"}}
+  var need=s.rows*s.per*c.portsPer,avail=READ[s.reader].ports*s.readers;
+  var lim=LIMIT[s.region].eirp;
+  return{cov:cov,stray:stray,dir:dir,dq:dq,need:need,avail:avail,eirpOk:c.eirp<=lim+0.05};
+}
+
+var S,C,G,E;
+function refresh(){
+  var rd=READ[$("reader").value];$("pw").max=rd.max;if(+$("pw").value>rd.max)$("pw").value=rd.max;
+  S=st();C=calc(S.ant,S);G=geom(S);E=evaluate(C,S,G);
+  $("modeRow").style.display=S.ant==="AN440"?"":"none";
+  $("gwO").textContent=S.gw+" ft";$("perO").textContent=S.per;$("spO").textContent=S.sp+" ft";$("htO").textContent=S.ht+" ft";
+  $("sdO").textContent=S.sd+" ft";$("pwO").textContent=C.P+" dBm";$("cableO").textContent=S.cable+" dB";$("thO").textContent=S.tagH+" ft";
+  $("sp").disabled=S.rows===1;
+  var a=ANT[S.ant];
+  $("spec").innerHTML="<dl><dt>Gain</dt><dd>"+a.g+" dBi</dd><dt>Beamwidth</dt><dd>"+a.h+"° × "+a.v+"°</dd><dt>Polarization</dt><dd>"+a.pol+"</dd><dt>Sealing</dt><dd>"+a.ip+"</dd><dt>Size</dt><dd>"+a.size+"</dd></dl><div style='margin-top:6px;color:var(--muted)'>"+a.note+"</div>";
+  var fx=Math.round(C.rx*2),fy=Math.round(C.ry*2);
+  set("rFoot",C.rx<0.3?"No read":fx+" × "+fy+" ft",C.rx<0.3?"bad":"");
+  $("rFootS").textContent="per antenna, at "+S.tagH+" ft tag height";
+  set("rEirp",C.eirp.toFixed(1)+" dBm",E.eirpOk?"ok":"bad");
+  $("rEirpS").textContent=E.eirpOk?LIMIT[S.region].txt:"Over the limit. "+LIMIT[S.region].txt;
+  set("rCov",Math.round(E.cov*100)+"%",E.cov>=0.99?"ok":"bad");
+  set("rDir",E.dir,E.dq);
+  $("rDirS").textContent=S.rows===1?"add a second row to tell entry from exit":"inside row "+S.sp+" ft from door row";
+  set("rShelf",E.stray?"Stray reads":"Clean",E.stray?"bad":"ok");
+  set("rPorts",E.need+" of "+E.avail,E.need<=E.avail?"ok":"bad");
+  $("rPortsS").textContent=E.need<=E.avail?(E.avail-E.need)+" spare":"add a reader or use fewer antennas";
+  var issues=[];
+  if(C.rx<0.3)issues.push("the antennas can't reach tags at this height and power");
+  else if(E.cov<0.99)issues.push("there are gaps in the gate where tags won't be read");
+  if(E.stray)issues.push("the display shelf is inside a read zone");
+  if(S.rows===2&&E.dq!=="ok"&&E.cov>=0.99)issues.push("the zones are too large to tell entry from exit reliably");
+  if(S.rows===1)issues.push("one row can't detect direction");
+  if(!E.eirpOk)issues.push("radiated power is above the "+S.region+" limit");
+  if(E.need>E.avail)issues.push("the reader doesn't have enough ports");
+  var v=$("verdict");
+  if(issues.length===0){v.className="verdict";v.innerHTML="<strong>This layout works.</strong> "+S.rows*S.per+" × "+S.ant+" on "+S.readers+" × "+S.reader+" at "+C.P+" dBm covers the full "+S.gw+" ft gate with clear direction and no shelf reads."}
+  else{v.className="verdict bad";v.innerHTML="<strong>Needs changes:</strong> "+issues.join("; ")+"."}
+  table();
+}
+function set(id,t,cls){var e=$(id);e.textContent=t;e.className=cls||""}
+function table(){
+  var h="";
+  Object.keys(ANT).forEach(function(k){
+    var a=ANT[k],c=calc(k,S),e=evaluate(c,S,G);
+    h+="<tr data-k='"+k+"' class='"+(k===S.ant?"sel":"")+"' tabindex='0'><td class='name'>"+k+"</td><td>"+a.g+" dBi</td><td>"+a.h+"° × "+a.v+"°</td><td>"+a.pol+"</td>"+
+      "<td>"+(c.rx<0.3?"<span class='bad'>No read</span>":Math.round(c.rx*2)+" × "+Math.round(c.ry*2)+" ft")+"</td>"+
+      "<td class='"+(e.cov>=0.99?"ok":"bad")+"'>"+Math.round(e.cov*100)+"%</td>"+
+      "<td class='"+e.dq+"'>"+e.dir+"</td>"+
+      "<td class='"+(e.stray?"bad":"ok")+"'>"+(e.stray?"Stray":"Clean")+"</td>"+
+      "<td class='"+(e.eirpOk?"ok":"bad")+"'>"+c.eirp.toFixed(1)+" dBm</td></tr>";
+  });
+  $("tbody").innerHTML=h;
+}
+$("tbody").addEventListener("click",function(ev){var tr=ev.target.closest("tr");if(tr){antSel.value=tr.dataset.k;refresh()}});
+$("tbody").addEventListener("keydown",function(ev){if(ev.key==="Enter"||ev.key===" "){var tr=ev.target.closest("tr");if(tr){ev.preventDefault();antSel.value=tr.dataset.k;refresh()}}});
+document.querySelectorAll("select,input").forEach(function(el){el.addEventListener("input",refresh);el.addEventListener("change",refresh)});
+
+var people=[],logs=[],flash=0,counts={a:0,m:0,u:0};
+var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches,auto=!reduce,nextSpawn=0,last=0;
+$("bAuto").setAttribute("aria-pressed",auto?"true":"false");
+$("bPaid").onclick=function(){spawn(true,false)};
+$("bUnpaid").onclick=function(){spawn(true,true)};
+$("bEnter").onclick=function(){spawn(false,false)};
+$("bAuto").onclick=function(){auto=!auto;this.setAttribute("aria-pressed",auto?"true":"false")};
+$("bClear").onclick=function(){logs=[];counts={a:0,m:0,u:0};renderLog()};
+function spawn(exit,unpaid){people.push({x:G.gl+1+Math.random()*(S.gw-2),y:exit?1:WORLD_H-0.5,v:exit?5:-5,exit:exit,unpaid:unpaid,tA:null,tB:null,done:false})}
+function addLog(t,bad){logs.unshift({t:t,bad:bad});logs=logs.slice(0,5);renderLog()}
+function renderLog(){
+  $("log").innerHTML=logs.length?logs.map(function(l){return "<div class='"+(l.bad?"bad":"")+"'>"+l.t+"</div>"}).join(""):"<div style='color:var(--muted)'>Shopper events will appear here.</div>";
+  $("cA").textContent=counts.a;$("cM").textContent=counts.m;$("cU").textContent=counts.u;
+}
+function evalP(p){
+  p.done=true;var a=p.tA!==null,b=p.tB!==null,two=S.rows===2;
+  if(p.exit){
+    if(!a&&!b){if(p.unpaid)counts.m++;addLog((p.unpaid?"Unpaid item":"Paid item")+" left without being read",p.unpaid);return}
+    if(two&&a&&b&&p.tA<p.tB){if(p.unpaid){flash=1;counts.a++;addLog("Exit detected, unpaid item: alarm",true)}else addLog("Exit detected, item paid: no alarm",false);return}
+    counts.u++;
+    if(p.unpaid){flash=0.6;counts.a++;addLog("Unpaid tag read but direction unclear: alarm on any read",true)}
+    else addLog("Paid item read, direction unclear",false);
+  }else{
+    if(two&&a&&b&&p.tB<p.tA)addLog("Entry detected, door row first: no alarm",false);
+    else if(!a&&!b)addLog("Entry not read",false);
+    else{counts.u++;addLog("Entry read but direction unclear: could look like an exit",true)}
+  }
+}
+var cv=$("cv"),ctx=cv.getContext("2d");
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function hexA(col,al){if(col.indexOf("rgba")===0)return col;var h=col.replace("#","");var r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return "rgba("+r+","+g+","+b+","+al+")"}
+function frame(ts){
+  var dt=last?Math.min((ts-last)/1000,0.05):0;last=ts;
+  if(auto&&ts>nextSpawn){var e=Math.random()<0.65;spawn(e,e&&Math.random()<0.35);nextSpawn=ts+2400}
+  var dpr=window.devicePixelRatio||1,Wpx=cv.clientWidth,s=Wpx/G.W,Hpx=WORLD_H*s;
+  if(cv.width!==Math.round(Wpx*dpr)||cv.height!==Math.round(Hpx*dpr)){cv.style.height=Hpx+"px";cv.width=Math.round(Wpx*dpr);cv.height=Math.round(Hpx*dpr)}
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,Wpx,Hpx);
+  var ink=css("--ink"),muted=css("--muted"),zA=css("--zoneA"),zB=css("--zoneB"),al=css("--alarm"),sig=css("--signal"),paid=css("--paid");
+  ctx.strokeStyle=css("--grid");ctx.lineWidth=1;
+  for(var gx=0;gx<=G.W;gx+=5){ctx.beginPath();ctx.moveTo(gx*s,0);ctx.lineTo(gx*s,Hpx);ctx.stroke()}
+  for(var gy=0;gy<=WORLD_H;gy+=5){ctx.beginPath();ctx.moveTo(0,gy*s);ctx.lineTo(Wpx,gy*s);ctx.stroke()}
+  ctx.fillStyle=css("--outside");ctx.fillRect(0,GATE_Y*s,Wpx,(WORLD_H-GATE_Y)*s);
+  ctx.font="500 13px Barlow, system-ui, sans-serif";ctx.fillStyle=muted;
+  ctx.fillText("Store floor",8,18);ctx.fillText("Outside, mall corridor",8,Hpx-10);
+  var sh=G.shelf;ctx.fillStyle=E.stray?hexA(al,.35):css("--shelf");ctx.fillRect(sh.x*s,sh.y*s,sh.w*s,sh.h*s);
+  ctx.fillStyle=E.stray?al:muted;ctx.fillText("Tagged display"+(E.stray?", read by antennas":""),sh.x*s,sh.y*s-6);
+  G.ants.forEach(function(a){var col=a.row==="A"?zA:zB;if(C.rx>0.3){ctx.beginPath();ctx.ellipse(a.x*s,a.y*s,C.rx*s,C.ry*s,0,0,Math.PI*2);ctx.fillStyle=hexA(col,.13);ctx.fill();ctx.strokeStyle=hexA(col,.7);ctx.lineWidth=1;ctx.stroke()}});
+  ctx.strokeStyle=ink;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(0,GATE_Y*s);ctx.lineTo(G.gl*s,GATE_Y*s);ctx.moveTo(G.gr*s,GATE_Y*s);ctx.lineTo(Wpx,GATE_Y*s);ctx.stroke();
+  if(flash>0.03){ctx.fillStyle=hexA(al,.14*flash);ctx.fillRect(G.gl*s,(GATE_Y-3)*s,S.gw*s,6*s)}
+  ctx.strokeStyle=flash>0.03?al:muted;ctx.lineWidth=flash>0.03?4:1.5;ctx.setLineDash([7,6]);ctx.beginPath();ctx.moveTo(G.gl*s,GATE_Y*s);ctx.lineTo(G.gr*s,GATE_Y*s);ctx.stroke();ctx.setLineDash([]);
+  flash=Math.max(0,flash-dt*0.6);
+  ctx.fillStyle=muted;ctx.textAlign="center";ctx.fillText(S.gw+" ft exit gate",(G.gl+S.gw/2)*s,GATE_Y*s+18);ctx.textAlign="start";
+  G.ants.forEach(function(a){ctx.fillStyle=a.row==="A"?zA:zB;var aw=Math.max(8,1.2*s),ah=Math.max(6,0.8*s);ctx.fillRect(a.x*s-aw/2,a.y*s-ah/2,aw,ah)});
+  ctx.fillStyle=ink;ctx.font="600 13px 'Barlow Semi Condensed', Barlow, sans-serif";
+  if(S.rows===2)ctx.fillText("Zone A",(G.gr+1.5)*s,G.yA*s+4);
+  ctx.fillText(S.rows===2?"Zone B":"Door row",(G.gr+1.5)*s,G.yB*s+4);
+  ctx.strokeStyle=muted;ctx.lineWidth=2;var sbx=G.W*s-5*s-12,sby=16;ctx.beginPath();ctx.moveTo(sbx,sby);ctx.lineTo(sbx+5*s,sby);ctx.stroke();
+  ctx.fillStyle=muted;ctx.font="500 12px Barlow, sans-serif";ctx.textAlign="center";ctx.fillText("5 ft",sbx+2.5*s,sby+15);ctx.textAlign="start";
+  people.forEach(function(p){
+    p.y+=p.v*dt;
+    var inA=S.rows===2&&inRow(C,G,"A",p.x,p.y),inB=inRow(C,G,"B",p.x,p.y);
+    if(inA&&p.tA===null)p.tA=ts;if(inB&&p.tB===null)p.tB=ts;
+    if(!p.done&&((p.exit&&p.y>GATE_Y+1)||(!p.exit&&p.y<Math.min(G.yA,G.yB)-C.ry-1)))evalP(p);
+    if(!p.done&&!p.exit&&p.y<1)evalP(p);
+    var rad=Math.max(5,0.9*s);
+    ctx.beginPath();ctx.arc(p.x*s,p.y*s,rad,0,Math.PI*2);ctx.fillStyle=p.unpaid?al:paid;ctx.fill();
+    if(inA||inB){ctx.beginPath();ctx.arc(p.x*s,p.y*s,rad+4,0,Math.PI*2);ctx.strokeStyle=sig;ctx.lineWidth=2.5;ctx.stroke()}
+  });
+  people=people.filter(function(p){return p.y>-1&&p.y<WORLD_H+1});
+  requestAnimationFrame(frame);
+}
+refresh();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
